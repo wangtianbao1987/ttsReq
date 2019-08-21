@@ -10,7 +10,7 @@ public class Main {
 	public static final String PRE;
 	public static List<Run> serverList = new ArrayList<Run>();
 	static {
-		PRE = "java -jar tts.jar";
+		PRE = "java -jar ttsReq.jar";
 		serverList.add(new TTS("tts"));
 	}
 	public static void main(String[] args) {
