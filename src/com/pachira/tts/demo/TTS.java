@@ -108,6 +108,7 @@ public class TTS extends Run {
 				System.out.println(lineStr);
 				String json = JSONObject.valueToString(param);
 				try {
+					bb = new byte[] {};
 					reqTTS(line,json);
 				}catch (Throwable e) {
 					e.printStackTrace();
