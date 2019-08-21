@@ -83,7 +83,7 @@ public class TTS extends Run {
 			br = new BufferedReader(isr);
 			String lineStr = null;
 			boolean start = false;
-			line = getSourceDataLine(512, 16000,16);
+			line = getSourceDataLine(512, Integer.parseInt(sample_rate),16);
 			A:while((lineStr=br.readLine()) != null) {
 				lineStr = lineStr.trim();
 				if("".equals(lineStr)) {
