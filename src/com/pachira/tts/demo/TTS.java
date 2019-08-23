@@ -271,7 +271,7 @@ public class TTS extends Run {
 	}
 	
 	public String readLine(InputStream in) throws Exception {
-		byte[] buff = new byte[100];
+		byte[] buff = new byte[200];
 		int len = 0;
 		while(true) {
 			int val = in.read();

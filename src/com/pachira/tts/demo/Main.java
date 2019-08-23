@@ -22,7 +22,7 @@ public class Main {
 			if(args[i] == null) {
 				continue;
 			}
-			if(args[i].startsWith("-")) {
+			if(args[i].startsWith("-") && !args[i].contains("----")) {
 				preKey = args[i];
 			}else if(preKey != null){
 				if(map.get(preKey)==null) {
