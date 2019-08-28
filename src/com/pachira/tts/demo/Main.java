@@ -12,6 +12,7 @@ public class Main {
 	static {
 		PRE = "java -jar ttsReq.jar";
 		serverList.add(new TTS("tts"));
+		serverList.add(new MainFrame("ttsframe"));
 	}
 	public static void main(String[] args) {
 		args = args==null?new String[] {}:args;
