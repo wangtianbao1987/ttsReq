@@ -439,6 +439,7 @@ public class MainFrame extends Run {
 			if(preTextLen != 0) {
 				if(readedLen+text.length() > maxPrintLen) {
 					doc.remove(0, readedLen);
+					readedLen = preTextLen;
 				}else {
 					doc.remove(readedLen-preTextLen, preTextLen);
 				}
