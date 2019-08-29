@@ -77,7 +77,7 @@ public class Main {
 		sb.append(PRE).append(" -0 [serverName] ...\n");
 		for(Run run:serverList) {
 			String serverName = run.getServerName();
-			sb.append("\t").append("[serverName]：").append(serverName).append("\n\t\t").append(run.desc()).append("\n-----------------------------------");
+			sb.append("\t").append("[serverName]：").append(serverName).append("\n\t\t").append(run.desc()).append("\n-----------------------------------\n");
 		}
 		return sb.toString();
 	}
