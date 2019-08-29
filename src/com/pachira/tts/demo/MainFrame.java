@@ -1,5 +1,6 @@
 package com.pachira.tts.demo;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.event.ActionEvent;
@@ -29,7 +30,11 @@ import javax.swing.JLabel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.JTextPane;
 import javax.swing.UIManager;
+import javax.swing.text.Document;
+import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyleConstants;
 
 import org.json.JSONObject;
 
@@ -37,14 +42,16 @@ public class MainFrame extends Run {
 	private JButton fbtn, playBtn;
 	private JTextField ffile, charsetF, urlF,volumeF,speedF,pitchF,tagModeF,engModeF,formatF,startF;
 	private JComboBox<String> voiceNameBox,sampleRateBox,bitBox;
-	private JTextArea area2,area3;
+	private JTextArea area2;
+	private JTextPane area3;
 	private Container c = null;
 	private static byte[] bb = new byte[] {};
 	private static int maxLen = 512;
 	private static boolean playing = false;
 	private SourceDataLine line;
-	private String[] strs = new String[100];
-	private int arrIndex = 0;
+	private String preText = "";
+	int readedLen = 0;
+	int maxPrintLen = Integer.MAX_VALUE-1024;
 	public MainFrame(String serverName) {
 		super(serverName);
 	}
@@ -96,10 +103,9 @@ public class MainFrame extends Run {
 		jsp2.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 		jsp2.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 		
-		area3 = new JTextArea(3,20);
+		area3 = new JTextPane();
 		area3.setEditable(false);
 		JScrollPane jsp3 = new JScrollPane(area3);
-		area3.setLineWrap(true);
 		jsp3.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 		jsp3.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 		
@@ -423,22 +429,34 @@ public class MainFrame extends Run {
 		}
 	}
 	
+	
+	
 	public void text(String text) {
-		StringBuffer sb = new StringBuffer();
-		arrIndex = (arrIndex+1) % strs.length;
-		for(int i=arrIndex;i<arrIndex+strs.length;i++) {
-			String str = strs[i%strs.length];
-			if(str == null) {
-				continue;
+		try {
+			SimpleAttributeSet set = new SimpleAttributeSet();
+			Document doc = area3.getStyledDocument();
+			int preTextLen = preText.length();
+			if(preTextLen != 0) {
+				if(readedLen+text.length() > maxPrintLen) {
+					doc.remove(0, readedLen);
+				}else {
+					doc.remove(readedLen-preTextLen, preTextLen);
+				}
+				StyleConstants.setFontSize(set, 16);
+				StyleConstants.setForeground(set, Color.BLACK);
+				doc.insertString(doc.getLength(), preText+"\n", set);
+				readedLen += 1;
 			}
-			sb.append("\n"+str+"\n");
+			text += "\n";
+			StyleConstants.setFontSize(set, 20);
+			StyleConstants.setForeground(set, Color.RED);
+			doc.insertString(doc.getLength(), text, set);
+			readedLen = readedLen+text.length();
+			area3.setCaretPosition(readedLen);
+			preText = text;
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
-		strs[arrIndex] = text;
-		sb.append("\n"+text+"\n");
-		
-		String str = sb.substring(1);
-		area3.setText(str);
-		area3.setCaretPosition(str.length()); 
 	}
 }
 
