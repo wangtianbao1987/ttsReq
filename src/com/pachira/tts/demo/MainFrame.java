@@ -42,11 +42,9 @@ public class MainFrame extends Run {
 	private static byte[] bb = new byte[] {};
 	private static int maxLen = 512;
 	private static boolean playing = false;
-	private static boolean firstPlay = true;
 	private SourceDataLine line;
-	private String[] strs = new String[30];
+	private String[] strs = new String[100];
 	private int arrIndex = 0;
-	private Object obj = new Object();
 	public MainFrame(String serverName) {
 		super(serverName);
 	}
@@ -85,7 +83,7 @@ public class MainFrame extends Run {
 		playBtn.addActionListener(new PlayListener(playBtn));
 		
 		charsetF.setText("UTF-8");
-		urlF.setText("http://pvcp.pachira.cn:8888/voice/tts");
+		urlF.setText("http://192.168.128.49:8888/voice/tts");
 		volumeF.setText("1");
 		speedF.setText("1.3");
 		pitchF.setText("1");
@@ -343,9 +341,6 @@ public class MainFrame extends Run {
 				}
 			}else {
 				playing = true;
-				synchronized (obj) {
-					obj.notify();
-				}
 				playBtn.setText("暂停");
 				Map<String,String> param = new HashMap<String,String>();
 				param.put("volume", volumeF.getText());
@@ -363,6 +358,7 @@ public class MainFrame extends Run {
 						BufferedReader br = null;
 						InputStreamReader isr = null;
 						FileInputStream fis = null;
+						String readStr = null;
 						try {
 							line = getSourceDataLine(
 									512,
@@ -372,8 +368,8 @@ public class MainFrame extends Run {
 							fis = new FileInputStream(ffile.getText());
 							isr = new InputStreamReader(fis,charsetF.getText());
 							br = new BufferedReader(isr);
-							String lineStr = null;
 							boolean start = false;
+							String lineStr = null;
 							A:while((lineStr=br.readLine()) != null) {
 								if(!playing) {
 									break A;
@@ -402,6 +398,7 @@ public class MainFrame extends Run {
 								}
 								
 								param.put("text", lineStr);
+								readStr = lineStr;
 								text(lineStr);
 								String json = JSONObject.valueToString(param);
 								try {
@@ -414,13 +411,10 @@ public class MainFrame extends Run {
 						}catch (Exception e) {
 							e.printStackTrace();
 						} finally {
-							try {
-								if(line != null) {
-									line.close();
-								}
-							}catch(Throwable e) {
-								e.printStackTrace();
-							}
+							startF.setText(readStr);
+							try {if(line != null) {line.drain();}}catch(Throwable e) {}
+							try {if(line != null) {line.stop();}}catch(Throwable e) {}
+							try {if(line != null) {line.close();}}catch(Throwable e) {}
 							close(br,isr,fis);
 						}
 					};
