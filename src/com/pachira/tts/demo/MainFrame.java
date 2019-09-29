@@ -5,6 +5,8 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.BufferedReader;
 import java.io.Closeable;
 import java.io.File;
@@ -39,7 +41,7 @@ import javax.swing.text.StyleConstants;
 import org.json.JSONObject;
 
 public class MainFrame extends Run {
-	private JButton fbtn, playBtn;
+	private JButton fbtn, playBtn, clearBtn;
 	private JTextField ffile, charsetF, urlF,volumeF,speedF,pitchF,tagModeF,engModeF,formatF,startF;
 	private JComboBox<String> voiceNameBox,sampleRateBox,bitBox;
 	private JTextArea area2;
@@ -49,9 +51,9 @@ public class MainFrame extends Run {
 	private static int maxLen = 512;
 	private static boolean playing = false;
 	private SourceDataLine line;
+	private String curText = "";
 	private String preText = "";
 	int readedLen = 0;
-	int maxPrintLen = Integer.MAX_VALUE-1024;
 	public MainFrame(String serverName) {
 		super(serverName);
 	}
@@ -59,7 +61,7 @@ public class MainFrame extends Run {
 	@Override
 	public void run(Map<String, List<String>> map) throws Exception {
 		try {
-			UIManager.setLookAndFeel("com.sun.java.swing.plaf.windows.WindowsLookAndFeel");  			
+			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());  			
 		}catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -88,6 +90,9 @@ public class MainFrame extends Run {
 		
 		playBtn = new JButton("播放");
 		playBtn.addActionListener(new PlayListener(playBtn));
+		
+		clearBtn = new JButton("清理文本");
+		clearBtn.addActionListener(new ClearListener(clearBtn));
 		
 		charsetF.setText("UTF-8");
 		urlF.setText("http://192.168.128.49:8888/voice/tts");
@@ -125,8 +130,20 @@ public class MainFrame extends Run {
 			new MyComp(new JLabel("音频格式："),5,y+=35,95,30),new MyComp(formatF,105,y,385,30),
 			new MyComp(new JLabel("开始位置："),5,y+=35,95,30),new MyComp(startF,105,y,385,30),
 			new MyComp(new JLabel("过滤位置："),5,y+=35,95,50),new MyComp(jsp2,105,y,385,50),
-			new MyComp(playBtn, 410, y+=55, 80,30),new MyComp(jsp3,500,5,485,y+25)
+			new MyComp(clearBtn, 320, y+=55, 80,30),new MyComp(playBtn, 410, y, 80,30),
+			new MyComp(jsp3,500,5,485,y+25)
 		);
+		
+		jf.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent event){
+				try {
+					ffile.getText();
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		});
 		
 		jf.setVisible(true);
 		jf.setResizable(false);
@@ -429,20 +446,39 @@ public class MainFrame extends Run {
 		}
 	}
 	
+	class ClearListener implements ActionListener{
+		JButton btn;
+		ClearListener(JButton btn){
+			this.btn = btn;
+		}
+		@Override
+		public void actionPerformed(ActionEvent ee) {
+			clearText();
+		}
+	}
 	
+	private void clearText() {
+		try {
+			if (readedLen == 0) {
+				return;
+			}
+			Document doc = area3.getStyledDocument();
+			doc.remove(0, doc.getLength());
+			preText = "";
+			readedLen = 0;
+			text(curText);
+		} catch (Exception e) {
+		}
+	}
 	
 	public void text(String text) {
 		try {
 			SimpleAttributeSet set = new SimpleAttributeSet();
 			Document doc = area3.getStyledDocument();
 			int preTextLen = preText.length();
+			
 			if(preTextLen != 0) {
-				if(readedLen+text.length() > maxPrintLen) {
-					doc.remove(0, readedLen);
-					readedLen = preTextLen;
-				}else {
-					doc.remove(readedLen-preTextLen, preTextLen);
-				}
+				doc.remove(readedLen-preTextLen, preTextLen);
 				StyleConstants.setFontSize(set, 16);
 				StyleConstants.setForeground(set, Color.BLACK);
 				doc.insertString(doc.getLength(), preText+"\n", set);
@@ -455,6 +491,7 @@ public class MainFrame extends Run {
 			readedLen = readedLen+text.length();
 			area3.setCaretPosition(readedLen);
 			preText = text;
+			curText = text;
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
