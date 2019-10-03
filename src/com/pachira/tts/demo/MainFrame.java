@@ -162,9 +162,7 @@ public class MainFrame extends Run {
 		}
 	}
 	
-	public static void main(String[] args) throws Exception {
-		new MainFrame("ttsframe").run(null);
-	}
+	
 	
 	
 	public SourceDataLine getSourceDataLine(int bufferSize,float sampleRate,int sampleSizeInBits) {
@@ -473,28 +471,36 @@ public class MainFrame extends Run {
 	
 	public void text(String text) {
 		try {
-			SimpleAttributeSet set = new SimpleAttributeSet();
 			Document doc = area3.getStyledDocument();
 			int preTextLen = preText.length();
-			
 			if(preTextLen != 0) {
-				doc.remove(readedLen-preTextLen, preTextLen);
-				StyleConstants.setFontSize(set, 16);
-				StyleConstants.setForeground(set, Color.BLACK);
-				doc.insertString(doc.getLength(), preText+"\n", set);
-				readedLen += 1;
+				doc.remove(readedLen-preTextLen-2, preTextLen+2);
+				SimpleAttributeSet set = new SimpleAttributeSet();
+				if (preText.matches("第.+章.+")) {
+					StyleConstants.setFontSize(set, 25);
+					StyleConstants.setForeground(set, Color.BLUE);
+				}else {
+					StyleConstants.setFontSize(set, 16);
+					StyleConstants.setForeground(set, Color.BLACK);
+				}
+				doc.insertString(doc.getLength(), preText+"\n\n", set);
 			}
-			text += "\n";
-			StyleConstants.setFontSize(set, 20);
-			StyleConstants.setForeground(set, Color.RED);
-			doc.insertString(doc.getLength(), text, set);
-			readedLen = readedLen+text.length();
-			area3.setCaretPosition(readedLen);
 			preText = text;
 			curText = text;
+			SimpleAttributeSet set = new SimpleAttributeSet();
+			StyleConstants.setFontSize(set, 20);
+			StyleConstants.setForeground(set, Color.RED);
+			doc.insertString(doc.getLength(), text+"\n\n", set);
+			readedLen = readedLen+text.length()+2;
+			area3.setCaretPosition(readedLen);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+	}
+	
+	
+	public static void main(String[] args) throws Exception {
+		new MainFrame("ttsframe").run(null);
 	}
 }
 
