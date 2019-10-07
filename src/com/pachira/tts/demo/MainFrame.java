@@ -41,9 +41,12 @@ import javax.swing.text.StyleConstants;
 import org.json.JSONObject;
 
 public class MainFrame extends Run {
-	private JButton fbtn, playBtn, clearBtn;
+	private JFrame jf;
+	private JButton fbtn, playBtn, clearBtn, zhidingBtn, zhanBtn;
 	private JTextField ffile, charsetF, urlF,volumeF,speedF,pitchF,tagModeF,engModeF,formatF,startF;
 	private JComboBox<String> voiceNameBox,sampleRateBox,bitBox;
+	private JScrollPane jsp2, jsp3;
+	private JLabel[] jLabels;
 	private JTextArea area2;
 	private JTextPane area3;
 	private Container c = null;
@@ -53,7 +56,9 @@ public class MainFrame extends Run {
 	private SourceDataLine line;
 	private String curText = "";
 	private String preText = "";
-	int readedLen = 0;
+	private int readedLen = 0;
+	private boolean top = false;
+	private boolean zhan = true;
 	public MainFrame(String serverName) {
 		super(serverName);
 	}
@@ -65,7 +70,7 @@ public class MainFrame extends Run {
 		}catch (Exception e) {
 			e.printStackTrace();
 		}
-		JFrame jf = new JFrame("TTS");
+		jf = new JFrame("TTS");
 		jf.setSize(1000, 605);
 		jf.setLocationRelativeTo(null);
 		jf.setLayout(null);
@@ -94,6 +99,12 @@ public class MainFrame extends Run {
 		clearBtn = new JButton("清理文本");
 		clearBtn.addActionListener(new ClearListener(clearBtn));
 		
+		zhidingBtn = new JButton("置顶");
+		zhidingBtn.addActionListener(new ZhidingListener(zhidingBtn));
+		
+		zhanBtn = new JButton("左侧隐藏");
+		zhanBtn.addActionListener(new ZhanListener(zhanBtn));
+		
 		charsetF.setText("UTF-8");
 		urlF.setText("http://192.168.128.49:8888/voice/tts");
 		volumeF.setText("1");
@@ -104,34 +115,27 @@ public class MainFrame extends Run {
 		formatF.setText("pcm");
 		
 		area2 = new JTextArea(3,20);
-		JScrollPane jsp2 = new JScrollPane(area2);
+		jsp2 = new JScrollPane(area2);
 		jsp2.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 		jsp2.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 		
 		area3 = new JTextPane();
 		area3.setEditable(false);
-		JScrollPane jsp3 = new JScrollPane(area3);
+		jsp3 = new JScrollPane(area3);
 		jsp3.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 		jsp3.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 		
-		int y = 5;
+		jLabels = new JLabel[] {
+			new JLabel("文件："),new JLabel("文件编码："),new JLabel("URL地址："),new JLabel("音量："),
+			new JLabel("语速："),new JLabel("音调："),new JLabel("发音人："),new JLabel("采样率："),
+			new JLabel("采样深度："),new JLabel("SSML："),new JLabel("英文读法："),new JLabel("音频格式："),
+			new JLabel("开始位置："),new JLabel("过滤位置：")
+		};
+		showLeftItems();
+		int y = 460;
 		addItem(
-			new MyComp(new JLabel("文件："),5,y,95,30),new MyComp(ffile,105,5,300,30),new MyComp(fbtn,410,5,80,30),
-			new MyComp(new JLabel("文件编码："),5,y+=35,95,30),new MyComp(charsetF,105,y,385,30),
-			new MyComp(new JLabel("URL地址："),5,y+=35,95,30),new MyComp(urlF,105,y,385,30),
-			new MyComp(new JLabel("音量："),5,y+=35,95,30),new MyComp(volumeF,105,y,385,30),
-			new MyComp(new JLabel("语速："),5,y+=35,95,30),new MyComp(speedF,105,y,385,30),
-			new MyComp(new JLabel("音调："),5,y+=35,95,30),new MyComp(pitchF,105,y,385,30),
-			new MyComp(new JLabel("发音人："),5,y+=35,95,30),new MyComp(voiceNameBox,105,y,385,30),
-			new MyComp(new JLabel("采样率："),5,y+=35,95,30),new MyComp(sampleRateBox,105,y,385,30),
-			new MyComp(new JLabel("采样深度："),5,y+=35,95,30),new MyComp(bitBox,105,y,385,30),
-			new MyComp(new JLabel("SSML："),5,y+=35,95,30),new MyComp(tagModeF,105,y,385,30),
-			new MyComp(new JLabel("英文读法："),5,y+=35,95,30),new MyComp(engModeF,105,y,385,30),
-			new MyComp(new JLabel("音频格式："),5,y+=35,95,30),new MyComp(formatF,105,y,385,30),
-			new MyComp(new JLabel("开始位置："),5,y+=35,95,30),new MyComp(startF,105,y,385,30),
-			new MyComp(new JLabel("过滤位置："),5,y+=35,95,50),new MyComp(jsp2,105,y,385,50),
-			new MyComp(clearBtn, 320, y+=55, 80,30),new MyComp(playBtn, 410, y, 80,30),
-			new MyComp(jsp3,500,5,485,y+25)
+			new MyComp(zhanBtn, 140, y+=55, 80,30),new MyComp(zhidingBtn, 230, y, 80,30),
+			new MyComp(clearBtn, 320, y, 80,30),new MyComp(playBtn, 410, y, 80,30)
 		);
 		
 		jf.addWindowListener(new WindowAdapter() {
@@ -210,7 +214,7 @@ public class MainFrame extends Run {
 			
 			String contentType = "";
 			int contentLength = 0;
-			while(!"".equals(len=readLine(in))) {
+			while(playing && !"".equals(len=readLine(in))) {
 				if(len.startsWith("Content-Type")) {
 					contentType = len;
 				}else if(len.startsWith("Content-Length")) {
@@ -218,7 +222,7 @@ public class MainFrame extends Run {
 				}
 			}
 			if(contentType.contains("audio")) {
-				while(!"0".equals(len = readLine(in))){
+				while(playing && !"0".equals(len = readLine(in))){
 					if("".equals(len)) {
 						continue;
 					}
@@ -239,14 +243,14 @@ public class MainFrame extends Run {
 						}
 					}
 					int readLen = 0;
-					while(pos < buff.length && -1 != (readLen=in.read(buff, pos, buff.length-pos))) {
+					while(playing && pos < buff.length && -1 != (readLen=in.read(buff, pos, buff.length-pos))) {
 						pos += readLen;
 					}
 					play(buff);
 					
 					bb = new byte[shengyu];
 					pos = 0;
-					while(pos < bb.length && -1 != (readLen=in.read(bb,pos,bb.length-pos))) {
+					while(playing && pos < bb.length && -1 != (readLen=in.read(bb,pos,bb.length-pos))) {
 						pos += readLen;
 					}
 				}
@@ -254,7 +258,7 @@ public class MainFrame extends Run {
 				byte[] buff = new byte[contentLength];
 				int pos = 0;
 				int readLen = 0;
-				while(pos < contentLength && -1 != (readLen=in.read(buff, pos, contentLength-pos))) {
+				while(playing && pos < contentLength && -1 != (readLen=in.read(buff, pos, contentLength-pos))) {
 					pos += readLen;
 				}
 				String errStr = new String(buff,"UTF-8").trim();
@@ -294,7 +298,7 @@ public class MainFrame extends Run {
 	public String readLine(InputStream in) throws Exception {
 		byte[] buff = new byte[200];
 		int len = 0;
-		while(true) {
+		while(playing) {
 			int val = in.read();
 			if(val == '\r') {
 				in.read(); // \n
@@ -386,7 +390,11 @@ public class MainFrame extends Run {
 									Integer.parseInt(sampleRateBox.getItemAt(sampleRateBox.getSelectedIndex())),
 									Integer.parseInt(bitBox.getItemAt(bitBox.getSelectedIndex()))
 									);
-							fis = new FileInputStream(ffile.getText());
+							File txtFile = new File(ffile.getText());
+							if (!txtFile.isFile()) {
+								throw new RuntimeException("文件找不到");
+							}
+							fis = new FileInputStream(txtFile);
 							isr = new InputStreamReader(fis,charsetF.getText());
 							br = new BufferedReader(isr);
 							boolean start = false;
@@ -430,7 +438,7 @@ public class MainFrame extends Run {
 								}
 							}
 						}catch (Exception e) {
-							e.printStackTrace();
+							text("[ERROR] -> "+e.getMessage());
 						} finally {
 							startF.setText(readStr);
 							try {if(line != null) {line.drain();}}catch(Throwable e) {}
@@ -453,6 +461,93 @@ public class MainFrame extends Run {
 		public void actionPerformed(ActionEvent ee) {
 			clearText();
 		}
+	}
+	
+	class ZhidingListener implements ActionListener{
+		JButton btn;
+		ZhidingListener(JButton btn){
+			this.btn = btn;
+		}
+		@Override
+		public void actionPerformed(ActionEvent ee) {
+			top = !top;
+			jf.setAlwaysOnTop(top);
+			if (top) {
+				btn.setText("取消置顶");
+			}else {
+				btn.setText("置顶");
+			}
+		}
+	}
+	
+	class ZhanListener implements ActionListener{
+		JButton btn;
+		ZhanListener(JButton btn){
+			this.btn = btn;
+		}
+		@Override
+		public void actionPerformed(ActionEvent ee) {
+			zhan = !zhan;
+			if (zhan) {
+				btn.setText("左侧隐藏");
+				showLeftItems();
+			}else {
+				btn.setText("展开");
+				removeLeftItems();
+			}
+		}
+	}
+	
+	private void removeLeftItems() {
+		for(int i=0;i<jLabels.length;i++) {
+			c.remove(jLabels[i]);
+		}
+		c.remove(ffile);
+		c.remove(fbtn);
+		c.remove(charsetF);
+		c.remove(urlF);
+		c.remove(volumeF);
+		c.remove(speedF);
+		c.remove(pitchF);
+		c.remove(voiceNameBox);
+		c.remove(sampleRateBox);
+		c.remove(bitBox);
+		c.remove(tagModeF);
+		c.remove(engModeF);
+		c.remove(formatF);
+		c.remove(startF);
+		c.remove(jsp2);
+		c.remove(sampleRateBox);
+		c.remove(sampleRateBox);
+		c.remove(sampleRateBox);
+		c.remove(jsp3);
+		addItem(new MyComp(jsp3,5,5,485,500));
+		jf.setSize(500, 605);
+		c.repaint();
+	}
+	
+	private void showLeftItems() {
+		int y = 5;
+		c.remove(jsp3);
+		jf.setSize(1000, 605);
+		addItem(
+			new MyComp(jLabels[0],5,y,95,30),new MyComp(ffile,105,5,300,30),new MyComp(fbtn,410,5,80,30),
+			new MyComp(jLabels[1],5,y+=35,95,30),new MyComp(charsetF,105,y,385,30),
+			new MyComp(jLabels[2],5,y+=35,95,30),new MyComp(urlF,105,y,385,30),
+			new MyComp(jLabels[3],5,y+=35,95,30),new MyComp(volumeF,105,y,385,30),
+			new MyComp(jLabels[4],5,y+=35,95,30),new MyComp(speedF,105,y,385,30),
+			new MyComp(jLabels[5],5,y+=35,95,30),new MyComp(pitchF,105,y,385,30),
+			new MyComp(jLabels[6],5,y+=35,95,30),new MyComp(voiceNameBox,105,y,385,30),
+			new MyComp(jLabels[7],5,y+=35,95,30),new MyComp(sampleRateBox,105,y,385,30),
+			new MyComp(jLabels[8],5,y+=35,95,30),new MyComp(bitBox,105,y,385,30),
+			new MyComp(jLabels[9],5,y+=35,95,30),new MyComp(tagModeF,105,y,385,30),
+			new MyComp(jLabels[10],5,y+=35,95,30),new MyComp(engModeF,105,y,385,30),
+			new MyComp(jLabels[11],5,y+=35,95,30),new MyComp(formatF,105,y,385,30),
+			new MyComp(jLabels[12],5,y+=35,95,30),new MyComp(startF,105,y,385,30),
+			new MyComp(jLabels[13],5,y+=35,95,50),new MyComp(jsp2,105,y,385,50),
+			new MyComp(jsp3,500,5,485,y+80)
+		);
+		c.repaint();
 	}
 	
 	private void clearText() {
