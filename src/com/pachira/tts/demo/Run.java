@@ -33,6 +33,7 @@ public abstract class Run {
 			if(cls != null) {
 				try {
 					cls.close();
+					cls = null;
 				}catch (Exception e) {}
 			}
 		}

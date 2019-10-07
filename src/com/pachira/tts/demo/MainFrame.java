@@ -42,7 +42,7 @@ import org.json.JSONObject;
 
 public class MainFrame extends Run {
 	private JFrame jf;
-	private JButton fbtn, playBtn, clearBtn, zhidingBtn, zhanBtn;
+	private JButton fbtn, playBtn, clearBtn, zhidingBtn, zhanBtn, nextBtn;
 	private JTextField ffile, charsetF, urlF,volumeF,speedF,pitchF,tagModeF,engModeF,formatF,startF;
 	private JComboBox<String> voiceNameBox,sampleRateBox,bitBox;
 	private JScrollPane jsp2, jsp3;
@@ -52,13 +52,18 @@ public class MainFrame extends Run {
 	private Container c = null;
 	private static byte[] bb = new byte[] {};
 	private static int maxLen = 512;
-	private static boolean playing = false;
+	private boolean playing = false,next = false;
 	private SourceDataLine line;
 	private String curText = "";
 	private String preText = "";
 	private int readedLen = 0;
 	private boolean top = false;
 	private boolean zhan = true;
+	private BufferedReader br;
+	private InputStreamReader isr;
+	private FileInputStream fis;
+	private int sampleRate, bit;
+	private Map<String,String> param = new HashMap<String,String>();
 	public MainFrame(String serverName) {
 		super(serverName);
 	}
@@ -105,6 +110,9 @@ public class MainFrame extends Run {
 		zhanBtn = new JButton("左侧隐藏");
 		zhanBtn.addActionListener(new ZhanListener(zhanBtn));
 		
+		nextBtn = new JButton("下一句");
+		nextBtn.addActionListener(new NextListener(nextBtn));
+		
 		charsetF.setText("UTF-8");
 		urlF.setText("http://192.168.128.49:8888/voice/tts");
 		volumeF.setText("1");
@@ -134,7 +142,8 @@ public class MainFrame extends Run {
 		showLeftItems();
 		int y = 460;
 		addItem(
-			new MyComp(zhanBtn, 140, y+=55, 80,30),new MyComp(zhidingBtn, 230, y, 80,30),
+			new MyComp(nextBtn, 50, y+=55, 80,30),
+			new MyComp(zhanBtn, 140, y, 80,30),new MyComp(zhidingBtn, 230, y, 80,30),
 			new MyComp(clearBtn, 320, y, 80,30),new MyComp(playBtn, 410, y, 80,30)
 		);
 		
@@ -166,15 +175,12 @@ public class MainFrame extends Run {
 		}
 	}
 	
-	
-	
-	
-	public SourceDataLine getSourceDataLine(int bufferSize,float sampleRate,int sampleSizeInBits) {
+	public SourceDataLine getSourceDataLine(int bufferSize) {
 		try {
 			int channels = 1;
 			boolean signed = true;
 			boolean bigEndian = false;
-			AudioFormat af = new AudioFormat(sampleRate, sampleSizeInBits, channels, signed, bigEndian);
+			AudioFormat af = new AudioFormat(sampleRate, bit, channels, signed, bigEndian);
 			SourceDataLine.Info info = new DataLine.Info(SourceDataLine.class, af, bufferSize);
 			SourceDataLine sdl = (SourceDataLine) AudioSystem.getLine(info);
 			sdl.open(af);
@@ -214,7 +220,10 @@ public class MainFrame extends Run {
 			
 			String contentType = "";
 			int contentLength = 0;
-			while(playing && !"".equals(len=readLine(in))) {
+			while(!"".equals(len=readLine(in))) {
+				if (!playing || next) {
+					return;
+				}
 				if(len.startsWith("Content-Type")) {
 					contentType = len;
 				}else if(len.startsWith("Content-Length")) {
@@ -222,7 +231,10 @@ public class MainFrame extends Run {
 				}
 			}
 			if(contentType.contains("audio")) {
-				while(playing && !"0".equals(len = readLine(in))){
+				while(!"0".equals(len = readLine(in))){
+					if (!playing || next) {
+						return;
+					}
 					if("".equals(len)) {
 						continue;
 					}
@@ -243,14 +255,20 @@ public class MainFrame extends Run {
 						}
 					}
 					int readLen = 0;
-					while(playing && pos < buff.length && -1 != (readLen=in.read(buff, pos, buff.length-pos))) {
+					while(pos < buff.length && -1 != (readLen=in.read(buff, pos, buff.length-pos))) {
+						if (!playing || next) {
+							return;
+						}
 						pos += readLen;
 					}
 					play(buff);
 					
 					bb = new byte[shengyu];
 					pos = 0;
-					while(playing && pos < bb.length && -1 != (readLen=in.read(bb,pos,bb.length-pos))) {
+					while(pos < bb.length && -1 != (readLen=in.read(bb,pos,bb.length-pos))) {
+						if (!playing || next) {
+							return;
+						}
 						pos += readLen;
 					}
 				}
@@ -258,7 +276,10 @@ public class MainFrame extends Run {
 				byte[] buff = new byte[contentLength];
 				int pos = 0;
 				int readLen = 0;
-				while(playing && pos < contentLength && -1 != (readLen=in.read(buff, pos, contentLength-pos))) {
+				while(pos < contentLength && -1 != (readLen=in.read(buff, pos, contentLength-pos))) {
+					if (!playing || next) {
+						return;
+					}
 					pos += readLen;
 				}
 				String errStr = new String(buff,"UTF-8").trim();
@@ -298,7 +319,10 @@ public class MainFrame extends Run {
 	public String readLine(InputStream in) throws Exception {
 		byte[] buff = new byte[200];
 		int len = 0;
-		while(playing) {
+		while(true) {
+			if(!playing) {
+				return "0";
+			}
 			int val = in.read();
 			if(val == '\r') {
 				in.read(); // \n
@@ -367,7 +391,6 @@ public class MainFrame extends Run {
 			}else {
 				playing = true;
 				playBtn.setText("暂停");
-				Map<String,String> param = new HashMap<String,String>();
 				param.put("volume", volumeF.getText());
 				param.put("speed", speedF.getText());
 				param.put("pitch", pitchF.getText());
@@ -380,16 +403,13 @@ public class MainFrame extends Run {
 				param.put("language", "zh-cmn");
 				new Thread() {
 					public void run() {
-						BufferedReader br = null;
-						InputStreamReader isr = null;
-						FileInputStream fis = null;
+						close(br,isr,fis);
 						String readStr = null;
+						String lineStr = null;
 						try {
-							line = getSourceDataLine(
-									512,
-									Integer.parseInt(sampleRateBox.getItemAt(sampleRateBox.getSelectedIndex())),
-									Integer.parseInt(bitBox.getItemAt(bitBox.getSelectedIndex()))
-									);
+							sampleRate = Integer.parseInt(sampleRateBox.getItemAt(sampleRateBox.getSelectedIndex()));
+							bit = Integer.parseInt(bitBox.getItemAt(bitBox.getSelectedIndex()));
+							line = getSourceDataLine(512);
 							File txtFile = new File(ffile.getText());
 							if (!txtFile.isFile()) {
 								throw new RuntimeException("文件找不到");
@@ -398,8 +418,11 @@ public class MainFrame extends Run {
 							isr = new InputStreamReader(fis,charsetF.getText());
 							br = new BufferedReader(isr);
 							boolean start = false;
-							String lineStr = null;
 							A:while((lineStr=br.readLine()) != null) {
+								if(next) {
+									next = false;
+									continue;
+								}
 								if(!playing) {
 									break A;
 								}
@@ -441,10 +464,16 @@ public class MainFrame extends Run {
 							text("[ERROR] -> "+e.getMessage());
 						} finally {
 							startF.setText(readStr);
-							try {if(line != null) {line.drain();}}catch(Throwable e) {}
-							try {if(line != null) {line.stop();}}catch(Throwable e) {}
-							try {if(line != null) {line.close();}}catch(Throwable e) {}
-							close(br,isr,fis);
+							if(line != null) {
+								try{line.drain();}catch(Throwable e) {}
+								try{line.stop();}catch(Throwable e) {}
+								try{line.close();}catch(Throwable e) {}
+								line=null;
+							}
+							if (lineStr == null) {
+								close(br,isr,fis);
+								playBtn.setText("播放");
+							}
 						}
 					};
 				}.start();
@@ -495,6 +524,17 @@ public class MainFrame extends Run {
 				btn.setText("展开");
 				removeLeftItems();
 			}
+		}
+	}
+	
+	class NextListener implements ActionListener{
+		JButton btn;
+		NextListener(JButton btn){
+			this.btn = btn;
+		}
+		@Override
+		public void actionPerformed(ActionEvent ee) {
+			next = true;
 		}
 	}
 	
@@ -592,7 +632,6 @@ public class MainFrame extends Run {
 			e.printStackTrace();
 		}
 	}
-	
 	
 	public static void main(String[] args) throws Exception {
 		new MainFrame("ttsframe").run(null);
