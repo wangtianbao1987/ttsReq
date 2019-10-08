@@ -16,9 +16,12 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.Socket;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
@@ -41,6 +44,8 @@ import javax.swing.text.StyleConstants;
 import org.json.JSONObject;
 
 public class MainFrame extends Run {
+	private int PER_MAX_LEN = 300;
+	private final Pattern pattern = Pattern.compile("(.+)([，。,\\?!？！；]+)([^，^。^,^\\?^!^？^！^；]+)");
 	private JFrame jf;
 	private JButton fbtn, playBtn, clearBtn, zhidingBtn, zhanBtn, nextBtn;
 	private JTextField ffile, charsetF, urlF,volumeF,speedF,pitchF,tagModeF,engModeF,formatF,startF;
@@ -419,45 +424,47 @@ public class MainFrame extends Run {
 							br = new BufferedReader(isr);
 							boolean start = false;
 							A:while((lineStr=br.readLine()) != null) {
-								if(next) {
-									next = false;
-									continue;
-								}
-								if(!playing) {
-									break A;
-								}
-								lineStr = lineStr.trim();
-								if("".equals(lineStr)) {
-									continue;
-								}
-								String searchStart = startF.getText();
-								if(searchStart == null || "".equals(searchStart)) {
-									start = true;
-								}else if(lineStr.indexOf(searchStart) != -1) {
-									start = true;
-								}
-								if(!start) {
-									continue;
-								}
-								
-								String[] filters = area2.getText().split("\n");
-								for(String filter : filters) {
-									if(filter != null && !"".equals(filter)) {
-										if(lineStr.indexOf(filter) != -1) {
-											continue A;
+								List<String> list = new ArrayList<String>();
+								str2arr(list, lineStr.trim());
+								B:for(int i=0;i<list.size();i++) {
+									String item = list.get(i);
+									if(next) {
+										next = false;
+										continue;
+									}
+									if(!playing) {
+										break A;
+									}
+									String searchStart = startF.getText();
+									if(searchStart == null || "".equals(searchStart)) {
+										start = true;
+									}else if(item.indexOf(searchStart) != -1) {
+										start = true;
+									}
+									if(!start) {
+										continue;
+									}
+									
+									String[] filters = area2.getText().split("\n");
+									for(String filter : filters) {
+										if(filter != null && !"".equals(filter)) {
+											if(item.indexOf(filter) != -1) {
+												continue B;
+											}
 										}
 									}
-								}
-								
-								param.put("text", lineStr);
-								readStr = lineStr;
-								text(lineStr);
-								String json = JSONObject.valueToString(param);
-								try {
-									bb = new byte[] {};
-									reqTTS(json);
-								}catch (Throwable e) {
-									e.printStackTrace();
+									
+									param.put("text", item);
+									readStr = item;
+									text(item);
+									String json = JSONObject.valueToString(param);
+									try {
+										bb = new byte[] {};
+										reqTTS(json);
+									}catch (Throwable e) {
+										e.printStackTrace();
+									}
+									
 								}
 							}
 						}catch (Exception e) {
@@ -477,6 +484,29 @@ public class MainFrame extends Run {
 						}
 					};
 				}.start();
+			}
+		}
+	}
+	
+	
+	public void str2arr(List<String> res, String line){
+		int lineLen = line.length();
+		if(lineLen == 0) {
+			return;
+		}else if(lineLen < PER_MAX_LEN) {
+			res.add(line);
+		}else {
+			String subStr = line.substring(0,PER_MAX_LEN);
+			Matcher matcher = pattern.matcher(subStr);
+			if(matcher.find()) {
+				String str1 = matcher.group(1);
+				String str2 = matcher.group(2);
+				String find = str1 + str2;
+				res.add(find.trim());
+				str2arr(res, line.substring(find.length()).trim());
+			}else {
+				res.add(subStr.trim());
+				str2arr(res, line.substring(subStr.length()).trim());
 			}
 		}
 	}
