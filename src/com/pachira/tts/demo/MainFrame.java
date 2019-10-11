@@ -95,7 +95,7 @@ public class MainFrame extends Run {
 		volumeF = new JTextField(20);
 		speedF = new JTextField(20);
 		pitchF = new JTextField(20);
-		voiceNameBox = new JComboBox<>(new String[] { "xiaoke", "xiaochang" });
+		voiceNameBox = new JComboBox<>(new String[] { "xiaoke", "xiaochang", "xiaobo" });
 		sampleRateBox = new JComboBox<>(new String[] { "8000", "16000" });
 		bitBox = new JComboBox<>(new String[] { "16", "8" });
 		tagModeF = new JTextField(20);
