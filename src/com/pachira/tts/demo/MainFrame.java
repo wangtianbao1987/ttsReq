@@ -5,6 +5,8 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.BufferedReader;
 import java.io.Closeable;
 import java.io.File;
@@ -14,9 +16,12 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.Socket;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
@@ -39,19 +44,31 @@ import javax.swing.text.StyleConstants;
 import org.json.JSONObject;
 
 public class MainFrame extends Run {
-	private JButton fbtn, playBtn;
+	private int PER_MAX_LEN = 300;
+	private final Pattern pattern = Pattern.compile("(.+)([，。,\\?!？！；]+)([^，^。^,^\\?^!^？^！^；]+)");
+	private JFrame jf;
+	private JButton fbtn, playBtn, clearBtn, zhidingBtn, zhanBtn, nextBtn;
 	private JTextField ffile, charsetF, urlF,volumeF,speedF,pitchF,tagModeF,engModeF,formatF,startF;
 	private JComboBox<String> voiceNameBox,sampleRateBox,bitBox;
+	private JScrollPane jsp2, jsp3;
+	private JLabel[] jLabels;
 	private JTextArea area2;
 	private JTextPane area3;
 	private Container c = null;
 	private static byte[] bb = new byte[] {};
 	private static int maxLen = 512;
-	private static boolean playing = false;
+	private boolean playing = false,next = false;
 	private SourceDataLine line;
+	private String curText = "";
 	private String preText = "";
-	int readedLen = 0;
-	int maxPrintLen = Integer.MAX_VALUE-1024;
+	private int readedLen = 0;
+	private boolean top = false;
+	private boolean zhan = true;
+	private BufferedReader br;
+	private InputStreamReader isr;
+	private FileInputStream fis;
+	private int sampleRate, bit;
+	private Map<String,String> param = new HashMap<String,String>();
 	public MainFrame(String serverName) {
 		super(serverName);
 	}
@@ -59,11 +76,11 @@ public class MainFrame extends Run {
 	@Override
 	public void run(Map<String, List<String>> map) throws Exception {
 		try {
-			UIManager.setLookAndFeel("com.sun.java.swing.plaf.windows.WindowsLookAndFeel");  			
+			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());  			
 		}catch (Exception e) {
 			e.printStackTrace();
 		}
-		JFrame jf = new JFrame("TTS");
+		jf = new JFrame("TTS");
 		jf.setSize(1000, 605);
 		jf.setLocationRelativeTo(null);
 		jf.setLayout(null);
@@ -78,7 +95,7 @@ public class MainFrame extends Run {
 		volumeF = new JTextField(20);
 		speedF = new JTextField(20);
 		pitchF = new JTextField(20);
-		voiceNameBox = new JComboBox<>(new String[] { "xiaoke", "xiaochang" });
+		voiceNameBox = new JComboBox<>(new String[] { "xiaoke", "xiaochang", "xiaobo" });
 		sampleRateBox = new JComboBox<>(new String[] { "8000", "16000" });
 		bitBox = new JComboBox<>(new String[] { "16", "8" });
 		tagModeF = new JTextField(20);
@@ -88,6 +105,18 @@ public class MainFrame extends Run {
 		
 		playBtn = new JButton("播放");
 		playBtn.addActionListener(new PlayListener(playBtn));
+		
+		clearBtn = new JButton("清理文本");
+		clearBtn.addActionListener(new ClearListener(clearBtn));
+		
+		zhidingBtn = new JButton("置顶");
+		zhidingBtn.addActionListener(new ZhidingListener(zhidingBtn));
+		
+		zhanBtn = new JButton("左侧隐藏");
+		zhanBtn.addActionListener(new ZhanListener(zhanBtn));
+		
+		nextBtn = new JButton("下一句");
+		nextBtn.addActionListener(new NextListener(nextBtn));
 		
 		charsetF.setText("UTF-8");
 		urlF.setText("http://192.168.128.49:8888/voice/tts");
@@ -99,34 +128,40 @@ public class MainFrame extends Run {
 		formatF.setText("pcm");
 		
 		area2 = new JTextArea(3,20);
-		JScrollPane jsp2 = new JScrollPane(area2);
+		jsp2 = new JScrollPane(area2);
 		jsp2.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 		jsp2.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 		
 		area3 = new JTextPane();
 		area3.setEditable(false);
-		JScrollPane jsp3 = new JScrollPane(area3);
+		jsp3 = new JScrollPane(area3);
 		jsp3.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 		jsp3.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 		
-		int y = 5;
+		jLabels = new JLabel[] {
+			new JLabel("文件："),new JLabel("文件编码："),new JLabel("URL地址："),new JLabel("音量："),
+			new JLabel("语速："),new JLabel("音调："),new JLabel("发音人："),new JLabel("采样率："),
+			new JLabel("采样深度："),new JLabel("SSML："),new JLabel("英文读法："),new JLabel("音频格式："),
+			new JLabel("开始位置："),new JLabel("过滤位置：")
+		};
+		showLeftItems();
+		int y = 460;
 		addItem(
-			new MyComp(new JLabel("文件："),5,y,95,30),new MyComp(ffile,105,5,300,30),new MyComp(fbtn,410,5,80,30),
-			new MyComp(new JLabel("文件编码："),5,y+=35,95,30),new MyComp(charsetF,105,y,385,30),
-			new MyComp(new JLabel("URL地址："),5,y+=35,95,30),new MyComp(urlF,105,y,385,30),
-			new MyComp(new JLabel("音量："),5,y+=35,95,30),new MyComp(volumeF,105,y,385,30),
-			new MyComp(new JLabel("语速："),5,y+=35,95,30),new MyComp(speedF,105,y,385,30),
-			new MyComp(new JLabel("音调："),5,y+=35,95,30),new MyComp(pitchF,105,y,385,30),
-			new MyComp(new JLabel("发音人："),5,y+=35,95,30),new MyComp(voiceNameBox,105,y,385,30),
-			new MyComp(new JLabel("采样率："),5,y+=35,95,30),new MyComp(sampleRateBox,105,y,385,30),
-			new MyComp(new JLabel("采样深度："),5,y+=35,95,30),new MyComp(bitBox,105,y,385,30),
-			new MyComp(new JLabel("SSML："),5,y+=35,95,30),new MyComp(tagModeF,105,y,385,30),
-			new MyComp(new JLabel("英文读法："),5,y+=35,95,30),new MyComp(engModeF,105,y,385,30),
-			new MyComp(new JLabel("音频格式："),5,y+=35,95,30),new MyComp(formatF,105,y,385,30),
-			new MyComp(new JLabel("开始位置："),5,y+=35,95,30),new MyComp(startF,105,y,385,30),
-			new MyComp(new JLabel("过滤位置："),5,y+=35,95,50),new MyComp(jsp2,105,y,385,50),
-			new MyComp(playBtn, 410, y+=55, 80,30),new MyComp(jsp3,500,5,485,y+25)
+			new MyComp(nextBtn, 50, y+=55, 80,30),
+			new MyComp(zhanBtn, 140, y, 80,30),new MyComp(zhidingBtn, 230, y, 80,30),
+			new MyComp(clearBtn, 320, y, 80,30),new MyComp(playBtn, 410, y, 80,30)
 		);
+		
+		jf.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent event){
+				try {
+					ffile.getText();
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		});
 		
 		jf.setVisible(true);
 		jf.setResizable(false);
@@ -145,17 +180,12 @@ public class MainFrame extends Run {
 		}
 	}
 	
-	public static void main(String[] args) throws Exception {
-		new MainFrame("ttsframe").run(null);
-	}
-	
-	
-	public SourceDataLine getSourceDataLine(int bufferSize,float sampleRate,int sampleSizeInBits) {
+	public SourceDataLine getSourceDataLine(int bufferSize) {
 		try {
 			int channels = 1;
 			boolean signed = true;
 			boolean bigEndian = false;
-			AudioFormat af = new AudioFormat(sampleRate, sampleSizeInBits, channels, signed, bigEndian);
+			AudioFormat af = new AudioFormat(sampleRate, bit, channels, signed, bigEndian);
 			SourceDataLine.Info info = new DataLine.Info(SourceDataLine.class, af, bufferSize);
 			SourceDataLine sdl = (SourceDataLine) AudioSystem.getLine(info);
 			sdl.open(af);
@@ -196,6 +226,9 @@ public class MainFrame extends Run {
 			String contentType = "";
 			int contentLength = 0;
 			while(!"".equals(len=readLine(in))) {
+				if (!playing || next) {
+					return;
+				}
 				if(len.startsWith("Content-Type")) {
 					contentType = len;
 				}else if(len.startsWith("Content-Length")) {
@@ -204,6 +237,9 @@ public class MainFrame extends Run {
 			}
 			if(contentType.contains("audio")) {
 				while(!"0".equals(len = readLine(in))){
+					if (!playing || next) {
+						return;
+					}
 					if("".equals(len)) {
 						continue;
 					}
@@ -225,6 +261,9 @@ public class MainFrame extends Run {
 					}
 					int readLen = 0;
 					while(pos < buff.length && -1 != (readLen=in.read(buff, pos, buff.length-pos))) {
+						if (!playing || next) {
+							return;
+						}
 						pos += readLen;
 					}
 					play(buff);
@@ -232,6 +271,9 @@ public class MainFrame extends Run {
 					bb = new byte[shengyu];
 					pos = 0;
 					while(pos < bb.length && -1 != (readLen=in.read(bb,pos,bb.length-pos))) {
+						if (!playing || next) {
+							return;
+						}
 						pos += readLen;
 					}
 				}
@@ -240,6 +282,9 @@ public class MainFrame extends Run {
 				int pos = 0;
 				int readLen = 0;
 				while(pos < contentLength && -1 != (readLen=in.read(buff, pos, contentLength-pos))) {
+					if (!playing || next) {
+						return;
+					}
 					pos += readLen;
 				}
 				String errStr = new String(buff,"UTF-8").trim();
@@ -280,6 +325,9 @@ public class MainFrame extends Run {
 		byte[] buff = new byte[200];
 		int len = 0;
 		while(true) {
+			if(!playing) {
+				return "0";
+			}
 			int val = in.read();
 			if(val == '\r') {
 				in.read(); // \n
@@ -348,7 +396,6 @@ public class MainFrame extends Run {
 			}else {
 				playing = true;
 				playBtn.setText("暂停");
-				Map<String,String> param = new HashMap<String,String>();
 				param.put("volume", volumeF.getText());
 				param.put("speed", speedF.getText());
 				param.put("pitch", pitchF.getText());
@@ -361,67 +408,79 @@ public class MainFrame extends Run {
 				param.put("language", "zh-cmn");
 				new Thread() {
 					public void run() {
-						BufferedReader br = null;
-						InputStreamReader isr = null;
-						FileInputStream fis = null;
+						close(br,isr,fis);
 						String readStr = null;
+						String lineStr = null;
 						try {
-							line = getSourceDataLine(
-									512,
-									Integer.parseInt(sampleRateBox.getItemAt(sampleRateBox.getSelectedIndex())),
-									Integer.parseInt(bitBox.getItemAt(bitBox.getSelectedIndex()))
-									);
-							fis = new FileInputStream(ffile.getText());
+							sampleRate = Integer.parseInt(sampleRateBox.getItemAt(sampleRateBox.getSelectedIndex()));
+							bit = Integer.parseInt(bitBox.getItemAt(bitBox.getSelectedIndex()));
+							line = getSourceDataLine(512);
+							File txtFile = new File(ffile.getText());
+							if (!txtFile.isFile()) {
+								throw new RuntimeException("文件找不到");
+							}
+							fis = new FileInputStream(txtFile);
 							isr = new InputStreamReader(fis,charsetF.getText());
 							br = new BufferedReader(isr);
 							boolean start = false;
-							String lineStr = null;
 							A:while((lineStr=br.readLine()) != null) {
-								if(!playing) {
-									break A;
-								}
-								lineStr = lineStr.trim();
-								if("".equals(lineStr)) {
-									continue;
-								}
-								String searchStart = startF.getText();
-								if(searchStart == null || "".equals(searchStart)) {
-									start = true;
-								}else if(lineStr.indexOf(searchStart) != -1) {
-									start = true;
-								}
-								if(!start) {
-									continue;
-								}
-								
-								String[] filters = area2.getText().split("\n");
-								for(String filter : filters) {
-									if(filter != null && !"".equals(filter)) {
-										if(lineStr.indexOf(filter) != -1) {
-											continue A;
+								List<String> list = new ArrayList<String>();
+								str2arr(list, lineStr.trim());
+								B:for(int i=0;i<list.size();i++) {
+									String item = list.get(i);
+									if(next) {
+										next = false;
+										continue;
+									}
+									if(!playing) {
+										break A;
+									}
+									String searchStart = startF.getText();
+									if(searchStart == null || "".equals(searchStart)) {
+										start = true;
+									}else if(item.indexOf(searchStart) != -1) {
+										start = true;
+									}
+									if(!start) {
+										continue;
+									}
+									
+									String[] filters = area2.getText().split("\n");
+									for(String filter : filters) {
+										if(filter != null && !"".equals(filter)) {
+											if(item.indexOf(filter) != -1) {
+												continue B;
+											}
 										}
 									}
-								}
-								
-								param.put("text", lineStr);
-								readStr = lineStr;
-								text(lineStr);
-								String json = JSONObject.valueToString(param);
-								try {
-									bb = new byte[] {};
-									reqTTS(json);
-								}catch (Throwable e) {
-									e.printStackTrace();
+									
+									param.put("text", item);
+									readStr = item;
+									text(item);
+									String json = JSONObject.valueToString(param);
+									try {
+										bb = new byte[] {};
+										reqTTS(json);
+									}catch (Throwable e) {
+										e.printStackTrace();
+									}
+									
 								}
 							}
 						}catch (Exception e) {
-							e.printStackTrace();
+							text("[ERROR] -> "+e.getMessage());
 						} finally {
 							startF.setText(readStr);
-							try {if(line != null) {line.drain();}}catch(Throwable e) {}
-							try {if(line != null) {line.stop();}}catch(Throwable e) {}
-							try {if(line != null) {line.close();}}catch(Throwable e) {}
-							close(br,isr,fis);
+							if(line != null) {
+								try{line.drain();}catch(Throwable e) {}
+								try{line.stop();}catch(Throwable e) {}
+								try{line.close();}catch(Throwable e) {}
+								line=null;
+							}
+							if (lineStr == null) {
+								close(br,isr,fis);
+								playBtn.setText("播放");
+							}
 						}
 					};
 				}.start();
@@ -430,34 +489,182 @@ public class MainFrame extends Run {
 	}
 	
 	
+	public void str2arr(List<String> res, String line){
+		int lineLen = line.length();
+		if(lineLen == 0) {
+			return;
+		}else if(lineLen < PER_MAX_LEN) {
+			res.add(line);
+		}else {
+			String subStr = line.substring(0,PER_MAX_LEN);
+			Matcher matcher = pattern.matcher(subStr);
+			if(matcher.find()) {
+				String str1 = matcher.group(1);
+				String str2 = matcher.group(2);
+				String find = str1 + str2;
+				res.add(find.trim());
+				str2arr(res, line.substring(find.length()).trim());
+			}else {
+				res.add(subStr.trim());
+				str2arr(res, line.substring(subStr.length()).trim());
+			}
+		}
+	}
+	
+	class ClearListener implements ActionListener{
+		JButton btn;
+		ClearListener(JButton btn){
+			this.btn = btn;
+		}
+		@Override
+		public void actionPerformed(ActionEvent ee) {
+			clearText();
+		}
+	}
+	
+	class ZhidingListener implements ActionListener{
+		JButton btn;
+		ZhidingListener(JButton btn){
+			this.btn = btn;
+		}
+		@Override
+		public void actionPerformed(ActionEvent ee) {
+			top = !top;
+			jf.setAlwaysOnTop(top);
+			if (top) {
+				btn.setText("取消置顶");
+			}else {
+				btn.setText("置顶");
+			}
+		}
+	}
+	
+	class ZhanListener implements ActionListener{
+		JButton btn;
+		ZhanListener(JButton btn){
+			this.btn = btn;
+		}
+		@Override
+		public void actionPerformed(ActionEvent ee) {
+			zhan = !zhan;
+			if (zhan) {
+				btn.setText("左侧隐藏");
+				showLeftItems();
+			}else {
+				btn.setText("展开");
+				removeLeftItems();
+			}
+		}
+	}
+	
+	class NextListener implements ActionListener{
+		JButton btn;
+		NextListener(JButton btn){
+			this.btn = btn;
+		}
+		@Override
+		public void actionPerformed(ActionEvent ee) {
+			next = true;
+		}
+	}
+	
+	private void removeLeftItems() {
+		for(int i=0;i<jLabels.length;i++) {
+			c.remove(jLabels[i]);
+		}
+		c.remove(ffile);
+		c.remove(fbtn);
+		c.remove(charsetF);
+		c.remove(urlF);
+		c.remove(volumeF);
+		c.remove(speedF);
+		c.remove(pitchF);
+		c.remove(voiceNameBox);
+		c.remove(sampleRateBox);
+		c.remove(bitBox);
+		c.remove(tagModeF);
+		c.remove(engModeF);
+		c.remove(formatF);
+		c.remove(startF);
+		c.remove(jsp2);
+		c.remove(sampleRateBox);
+		c.remove(sampleRateBox);
+		c.remove(sampleRateBox);
+		c.remove(jsp3);
+		addItem(new MyComp(jsp3,5,5,485,500));
+		jf.setSize(500, 605);
+		c.repaint();
+	}
+	
+	private void showLeftItems() {
+		int y = 5;
+		c.remove(jsp3);
+		jf.setSize(1000, 605);
+		addItem(
+			new MyComp(jLabels[0],5,y,95,30),new MyComp(ffile,105,5,300,30),new MyComp(fbtn,410,5,80,30),
+			new MyComp(jLabels[1],5,y+=35,95,30),new MyComp(charsetF,105,y,385,30),
+			new MyComp(jLabels[2],5,y+=35,95,30),new MyComp(urlF,105,y,385,30),
+			new MyComp(jLabels[3],5,y+=35,95,30),new MyComp(volumeF,105,y,385,30),
+			new MyComp(jLabels[4],5,y+=35,95,30),new MyComp(speedF,105,y,385,30),
+			new MyComp(jLabels[5],5,y+=35,95,30),new MyComp(pitchF,105,y,385,30),
+			new MyComp(jLabels[6],5,y+=35,95,30),new MyComp(voiceNameBox,105,y,385,30),
+			new MyComp(jLabels[7],5,y+=35,95,30),new MyComp(sampleRateBox,105,y,385,30),
+			new MyComp(jLabels[8],5,y+=35,95,30),new MyComp(bitBox,105,y,385,30),
+			new MyComp(jLabels[9],5,y+=35,95,30),new MyComp(tagModeF,105,y,385,30),
+			new MyComp(jLabels[10],5,y+=35,95,30),new MyComp(engModeF,105,y,385,30),
+			new MyComp(jLabels[11],5,y+=35,95,30),new MyComp(formatF,105,y,385,30),
+			new MyComp(jLabels[12],5,y+=35,95,30),new MyComp(startF,105,y,385,30),
+			new MyComp(jLabels[13],5,y+=35,95,50),new MyComp(jsp2,105,y,385,50),
+			new MyComp(jsp3,500,5,485,y+80)
+		);
+		c.repaint();
+	}
+	
+	private void clearText() {
+		try {
+			if (readedLen == 0) {
+				return;
+			}
+			Document doc = area3.getStyledDocument();
+			doc.remove(0, doc.getLength());
+			preText = "";
+			readedLen = 0;
+			text(curText);
+		} catch (Exception e) {
+		}
+	}
 	
 	public void text(String text) {
 		try {
-			SimpleAttributeSet set = new SimpleAttributeSet();
 			Document doc = area3.getStyledDocument();
 			int preTextLen = preText.length();
 			if(preTextLen != 0) {
-				if(readedLen+text.length() > maxPrintLen) {
-					doc.remove(0, readedLen);
-					readedLen = preTextLen;
+				doc.remove(readedLen-preTextLen-2, preTextLen+2);
+				SimpleAttributeSet set = new SimpleAttributeSet();
+				if (preText.matches("第.+章.+")) {
+					StyleConstants.setFontSize(set, 25);
+					StyleConstants.setForeground(set, Color.BLUE);
 				}else {
-					doc.remove(readedLen-preTextLen, preTextLen);
+					StyleConstants.setFontSize(set, 16);
+					StyleConstants.setForeground(set, Color.BLACK);
 				}
-				StyleConstants.setFontSize(set, 16);
-				StyleConstants.setForeground(set, Color.BLACK);
-				doc.insertString(doc.getLength(), preText+"\n", set);
-				readedLen += 1;
+				doc.insertString(doc.getLength(), preText+"\n\n", set);
 			}
-			text += "\n";
+			preText = text;
+			curText = text;
+			SimpleAttributeSet set = new SimpleAttributeSet();
 			StyleConstants.setFontSize(set, 20);
 			StyleConstants.setForeground(set, Color.RED);
-			doc.insertString(doc.getLength(), text, set);
-			readedLen = readedLen+text.length();
+			doc.insertString(doc.getLength(), text+"\n\n", set);
+			readedLen = readedLen+text.length()+2;
 			area3.setCaretPosition(readedLen);
-			preText = text;
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+	}
+	
+	public static void main(String[] args) throws Exception {
+		new MainFrame("ttsframe").run(null);
 	}
 }
 
