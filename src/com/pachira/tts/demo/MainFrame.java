@@ -41,7 +41,10 @@ import javax.swing.text.Document;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 
-import org.json.JSONObject;
+import com.pachira.tts.client.PTTS;
+import com.pachira.tts.client.callback.PTTSCallback;
+import com.pachira.tts.client.domain.PTTSErrResponse;
+import com.pachira.tts.client.domain.PTTSReqParam;
 
 public class MainFrame extends Run {
 	private int PER_MAX_LEN = 300;
@@ -69,8 +72,10 @@ public class MainFrame extends Run {
 	private FileInputStream fis;
 	private int sampleRate, bit;
 	private Map<String,String> param = new HashMap<String,String>();
+	
 	public MainFrame(String serverName) {
 		super(serverName);
+		PTTS.init("192.168.128.49", 8888);
 	}
 	
 	@Override
@@ -95,7 +100,7 @@ public class MainFrame extends Run {
 		volumeF = new JTextField(20);
 		speedF = new JTextField(20);
 		pitchF = new JTextField(20);
-		voiceNameBox = new JComboBox<>(new String[] { "xiaoke", "xiaochang", "xiaobo" });
+		voiceNameBox = new JComboBox<>(new String[] { "xiaoqing", "xiaoxue", "taoge", "hongmei", "guozai", "xiaoke", "xiaowen", "ivanka", "andy", "shirley" });
 		sampleRateBox = new JComboBox<>(new String[] { "8000", "16000" });
 		bitBox = new JComboBox<>(new String[] { "16", "8" });
 		tagModeF = new JTextField(20);
@@ -195,6 +200,47 @@ public class MainFrame extends Run {
 			e.printStackTrace();
 			return null;
 		}
+	}
+	
+	public void reqTTS2(Map<String,String> param) {
+		PTTSReqParam ttsParam = new PTTSReqParam();
+		ttsParam.setVolume(Float.parseFloat(param.get("volume")));
+		ttsParam.setSpeed(Float.parseFloat(param.get("speed")));
+		ttsParam.setPitch(Float.parseFloat(param.get("pitch")));
+		ttsParam.setSample_rate(Integer.parseInt(param.get("sample_rate")));
+		ttsParam.setBit(Integer.parseInt(param.get("bit")));
+		ttsParam.setTag_mode(Integer.parseInt(param.get("tag_mode")));
+		ttsParam.setEng_mode(Integer.parseInt(param.get("eng_mode")));
+		ttsParam.setVoice_name(param.get("voice_name"));
+		ttsParam.setFormat(param.get("format"));
+		ttsParam.setLanguage(param.get("language"));
+        ttsParam.setText(param.get("text"));
+        
+        PTTS.getInstance().tts(ttsParam, new PTTSCallback() {
+            @Override
+            public boolean callback(byte[] buff) {
+            	play(buff);
+                return true;
+            }
+            @Override
+            public void errorCallback(PTTSErrResponse resp) {
+                
+            }
+            @Override
+            public void beforeResponse() {
+                
+            }
+            @Override
+            public void processCallback(long curDataSize, long curDataTime, long beginTime, long endTime,
+                    int beginIndex, int endIndex) {
+                
+            }
+            @Override
+            public void finishProcessCallback(long dataSize, long playTime) {
+                System.out.println("dataSize = " + dataSize + "; playTime = " + playTime);
+            }
+             
+        });
 	}
 	
 	public void reqTTS(String body) {
@@ -457,10 +503,11 @@ public class MainFrame extends Run {
 									param.put("text", item);
 									readStr = item;
 									text(item);
-									String json = JSONObject.valueToString(param);
+									// String json = JSONObject.valueToString(param);
 									try {
 										bb = new byte[] {};
-										reqTTS(json);
+										// reqTTS(json);
+										reqTTS2(param);
 									}catch (Throwable e) {
 										e.printStackTrace();
 									}
