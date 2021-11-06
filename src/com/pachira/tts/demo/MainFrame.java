@@ -16,10 +16,12 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.Socket;
 import java.net.URI;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Vector;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -42,7 +44,9 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 
 import com.pachira.tts.client.PTTS;
+import com.pachira.tts.client.callback.LicCallback;
 import com.pachira.tts.client.callback.PTTSCallback;
+import com.pachira.tts.client.domain.LicResp;
 import com.pachira.tts.client.domain.PTTSErrResponse;
 import com.pachira.tts.client.domain.PTTSReqParam;
 
@@ -72,10 +76,29 @@ public class MainFrame extends Run {
 	private FileInputStream fis;
 	private int sampleRate, bit;
 	private Map<String,String> param = new HashMap<String,String>();
+	private TXTUtil tu = TXTUtil.newInstance("conf.txt");
+
+	private List<String> voiceNames;
+	private List<String> voiceNameStrs;
 	
 	public MainFrame(String serverName) {
 		super(serverName);
-		PTTS.init("192.168.128.49", 8888);
+		Server server = getServer();
+		PTTS.init(server.getHost(), server.getPort());
+	}
+
+	public Server getServer() {
+		try {
+			if (urlF == null) {
+				URL url = new URL(tu.getValue("ttsframe.url"));
+				return new Server(url.getHost(), url.getPort());
+			} else {
+				URL url = new URL(urlF.getText());
+				return new Server(url.getHost(), url.getPort());
+			}
+		} catch (Exception e) {
+			return new Server("192.168.128.49", 8888);
+		}
 	}
 	
 	@Override
@@ -100,7 +123,13 @@ public class MainFrame extends Run {
 		volumeF = new JTextField(20);
 		speedF = new JTextField(20);
 		pitchF = new JTextField(20);
-		voiceNameBox = new JComboBox<>(new String[] { "xiaoqing", "xiaoxue", "taoge", "hongmei", "guozai", "xiaoke", "xiaowen", "ivanka", "andy", "shirley" });
+
+		initVideoNames();
+
+		Vector<String> vs = new Vector<String>();
+		vs.addAll(voiceNameStrs);
+		voiceNameBox = new JComboBox<String>(vs);
+
 		sampleRateBox = new JComboBox<>(new String[] { "8000", "16000" });
 		bitBox = new JComboBox<>(new String[] { "16", "8" });
 		tagModeF = new JTextField(20);
@@ -123,14 +152,14 @@ public class MainFrame extends Run {
 		nextBtn = new JButton("下一句");
 		nextBtn.addActionListener(new NextListener(nextBtn));
 		
-		charsetF.setText("UTF-8");
-		urlF.setText("http://192.168.128.49:8888/voice/tts");
-		volumeF.setText("1");
-		speedF.setText("1.3");
-		pitchF.setText("1");
-		tagModeF.setText("0");
-		engModeF.setText("0");
-		formatF.setText("pcm");
+		charsetF.setText(tu.getValue("ttsframe.encoding"));
+		urlF.setText(tu.getValue("ttsframe.url"));
+		volumeF.setText(tu.getValue("ttsframe.volume"));
+		speedF.setText(tu.getValue("ttsframe.speed"));
+		pitchF.setText(tu.getValue("ttsframe.pitch"));
+		tagModeF.setText(tu.getValue("ttsframe.tagMode"));
+		engModeF.setText(tu.getValue("ttsframe.engMode"));
+		formatF.setText(tu.getValue("ttsframe.format"));
 		
 		area2 = new JTextArea(3,20);
 		jsp2 = new JScrollPane(area2);
@@ -241,6 +270,21 @@ public class MainFrame extends Run {
             }
              
         });
+	}
+
+	private void initVideoNames() {
+		PTTS.getInstance().showlic(new LicCallback(){
+			public void callback(LicResp response) {
+				voiceNames = response.getVoiceNames();
+				voiceNameStrs = response.getVoiceNameStrs();
+			}
+		});
+		if (voiceNames == null) {
+			voiceNames = new ArrayList<>();
+			voiceNames.add("xiaoqing");
+			voiceNameStrs = new ArrayList<>();
+			voiceNameStrs.add("小晴");
+		}
 	}
 	
 	public void reqTTS(String body) {
@@ -435,6 +479,9 @@ public class MainFrame extends Run {
 				playing = false;
 				playBtn.setText("播放");
 				try {
+					if (line == null) {
+						return;
+					}
 					line.stop();
 				}catch (Exception e) {
 					e.printStackTrace();
@@ -445,7 +492,7 @@ public class MainFrame extends Run {
 				param.put("volume", volumeF.getText());
 				param.put("speed", speedF.getText());
 				param.put("pitch", pitchF.getText());
-				param.put("voice_name", voiceNameBox.getItemAt(voiceNameBox.getSelectedIndex()));
+				param.put("voice_name", voiceNames.get(voiceNameBox.getSelectedIndex()));
 				param.put("sample_rate", sampleRateBox.getItemAt(sampleRateBox.getSelectedIndex()));
 				param.put("bit", bitBox.getItemAt(bitBox.getSelectedIndex()));
 				param.put("tag_mode", tagModeF.getText());
